@@ -57,6 +57,8 @@ export default {
     allowPermission: '권한 허용',
     processing: '텍스트 인식 중...',
     recognized: '인식된 텍스트:',
+    unavailable: '텍스트 인식은 개발 빌드(Dev Build)에서만 사용할 수 있어요.\nExpo Go에서는 지원되지 않습니다.',
+    noTextFound: '텍스트를 충분히 인식하지 못했어요. 문장 전체가 잘 보이도록 다시 촬영해보세요.',
     match: '일치도:',
     retake: '다시 촬영',
     close: '닫기',

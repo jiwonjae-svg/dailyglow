@@ -10,6 +10,7 @@ import {
   limit,
   orderBy,
   startAfter,
+  runTransaction,
   serverTimestamp,
   Timestamp,
   type QueryDocumentSnapshot,
@@ -35,6 +36,8 @@ export interface FirestoreUser {
   isPremium?: boolean;
   premiumPurchasedAt?: Timestamp;
   communitySubmissions?: number[];
+  followerCount?: number;
+  followingCount?: number;
   fcmToken?: string;
 }
 
@@ -60,6 +63,18 @@ export interface UserActivity {
 // =============================================================================
 // User Management
 // =============================================================================
+
+const PUBLIC_PROFILES = 'public_profiles';
+
+function publicProfilePayload(data: Record<string, any>) {
+  return {
+    displayName: data.displayName ?? null,
+    username: data.username ?? null,
+    photoURL: data.photoURL ?? null,
+    bio: data.bio ?? null,
+    updatedAt: serverTimestamp(),
+  };
+}
 
 /**
  * Creates or updates a user document in the `users` collection.
@@ -95,6 +110,25 @@ export async function syncUserToFirestore(
     }
 
     await setDoc(userRef, userData, { merge: true });
+
+    const profileData = isNew
+      ? {
+          displayName: user.displayName,
+          username: null,
+          photoURL: user.photoURL,
+          bio: null,
+        }
+      : {
+          ...existingDoc.data(),
+          displayName: existingDoc.data()?.displayName ?? user.displayName,
+          photoURL: existingDoc.data()?.photoURL ?? user.photoURL,
+        };
+
+    await setDoc(
+      doc(db, PUBLIC_PROFILES, user.uid),
+      publicProfilePayload(profileData),
+      { merge: true },
+    );
   } catch (error) {
     console.warn('[firestoreUserService] Failed to sync user:', error);
   }
@@ -130,38 +164,19 @@ export async function updatePremiumStatus(
   uid: string,
   isPremium: boolean,
 ): Promise<boolean> {
-  try {
-    initFirebase();
-    const db = getDb();
-    if (!db) return false;
-
-    const userRef = doc(db, 'users', uid);
-    const updateData: Partial<FirestoreUser> = {
-      isPremium,
-    };
-
-    if (isPremium) {
-      updateData.premiumPurchasedAt = serverTimestamp() as Timestamp;
-    }
-
-    await setDoc(userRef, updateData, { merge: true });
-    return true;
-  } catch (error) {
-    console.warn('[firestoreUserService] Failed to update premium status:', error);
-    return false;
-  }
+  appLog.log('[firestoreUserService] premium Firestore mirror skipped; RevenueCat is authoritative', {
+    uid,
+    isPremium,
+  });
+  return false;
 }
 
 /**
  * Fetches the premium status for a user from Firestore.
  */
 export async function fetchPremiumStatus(uid: string): Promise<boolean> {
-  try {
-    const user = await getUserFromFirestore(uid);
-    return user?.isPremium ?? false;
-  } catch {
-    return false;
-  }
+  appLog.log('[firestoreUserService] premium Firestore status ignored; RevenueCat is authoritative', { uid });
+  return false;
 }
 
 // =============================================================================
@@ -523,7 +538,7 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
     initFirebase();
     const db = getDb();
     if (!db) return true; // assume available when offline/uninitialized
-    const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()), limit(1));
+    const q = query(collection(db, PUBLIC_PROFILES), where('username', '==', username.toLowerCase()), limit(1));
     const snap = await getDocs(q);
     return snap.empty;
   } catch {
@@ -553,25 +568,60 @@ export async function saveUserProfile(
     if (!db) return { success: false, error: 'unknown' };
 
     const lowerUsername = username.toLowerCase();
+    const sanitizedBio = bio !== undefined ? sanitizeBio(bio) : undefined;
     const userRef = doc(db, 'users', uid);
+    const publicProfileRef = doc(db, PUBLIC_PROFILES, uid);
+    const usernameRef = doc(db, 'usernames', lowerUsername);
+    const previousLowerUsername = previousUsername?.toLowerCase();
 
-    // Write displayName, username, and optional photoURL directly to users/{uid}.
-    // The separate 'usernames' collection has been removed as it was unused.
-    const { setDoc: setDocFn } = await import('firebase/firestore');
-    await setDocFn(
-      userRef,
-      {
-        displayName,
-        username: lowerUsername,
-        ...(photoURL !== undefined && { photoURL }),
-        ...(bio !== undefined && { bio: sanitizeBio(bio) }),
-      },
-      { merge: true },
-    );
+    await runTransaction(db, async (transaction) => {
+      const previousUsernameRef = previousLowerUsername && previousLowerUsername !== lowerUsername
+        ? doc(db, 'usernames', previousLowerUsername)
+        : null;
+      const usernameSnap = await transaction.get(usernameRef);
+      const previousUsernameSnap = previousUsernameRef
+        ? await transaction.get(previousUsernameRef)
+        : null;
+
+      if (usernameSnap.exists() && usernameSnap.data()?.uid !== uid) {
+        throw new Error('taken');
+      }
+
+      if (!usernameSnap.exists()) {
+        transaction.set(usernameRef, { uid });
+      }
+
+      if (previousUsernameRef && previousUsernameSnap?.exists() && previousUsernameSnap.data()?.uid === uid) {
+        transaction.delete(previousUsernameRef);
+      }
+
+      transaction.set(
+        userRef,
+        {
+          displayName,
+          username: lowerUsername,
+          ...(photoURL !== undefined && { photoURL }),
+          ...(sanitizedBio !== undefined && { bio: sanitizedBio }),
+        },
+        { merge: true },
+      );
+
+      transaction.set(
+        publicProfileRef,
+        {
+          displayName,
+          username: lowerUsername,
+          ...(photoURL !== undefined && { photoURL }),
+          ...(sanitizedBio !== undefined && { bio: sanitizedBio }),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
 
     return { success: true };
   } catch (err: any) {
-    if (err?.code === 'taken') return { success: false, error: 'taken' };
+    if (err?.message === 'taken' || err?.code === 'taken') return { success: false, error: 'taken' };
     return { success: false, error: 'unknown' };
   }
 }
@@ -715,7 +765,7 @@ export async function fetchPublicUserProfile(targetUid: string): Promise<PublicU
     initFirebase();
     const db = getDb();
     if (!db) return null;
-    const snap = await getDoc(doc(db, 'users', targetUid));
+    const snap = await getDoc(doc(db, PUBLIC_PROFILES, targetUid));
     if (!snap.exists()) return null;
     const d = snap.data() as any;
     return {
@@ -744,10 +794,11 @@ export async function searchUsersByUsername(
     initFirebase();
     const db = getDb();
     if (!db) return [];
-    const lq = usernameQuery.toLowerCase();
+    const lq = usernameQuery.trim().toLowerCase();
+    if (!lq) return [];
     const end = lq.slice(0, -1) + String.fromCharCode(lq.charCodeAt(lq.length - 1) + 1);
     const q = query(
-      collection(db, 'users'),
+      collection(db, PUBLIC_PROFILES),
       where('username', '>=', lq),
       where('username', '<', end),
       limit(maxResults),
@@ -792,17 +843,11 @@ export async function followUser(
     initFirebase();
     const db = getDb();
     if (!db) return;
-    const { updateDoc, increment: inc } = await import('firebase/firestore');
     await setDoc(doc(db, 'follows', `${myUid}_${targetUid}`), {
       followerId: myUid,
       followedId: targetUid,
       createdAt: serverTimestamp(),
     });
-    // Denormalize counts (best-effort; silently ignored if rules restrict)
-    try {
-      await updateDoc(doc(db, 'users', myUid), { followingCount: inc(1) });
-      await updateDoc(doc(db, 'users', targetUid), { followerCount: inc(1) });
-    } catch { /* non-critical */ }
     // Write follow notification to the target user's subcollection
     try {
       await setDoc(doc(db, 'users', targetUid, 'notifications', `follow_${myUid}`), {
@@ -826,12 +871,8 @@ export async function unfollowUser(myUid: string, targetUid: string): Promise<vo
     initFirebase();
     const db = getDb();
     if (!db) return;
-    const { deleteDoc, updateDoc, increment: inc } = await import('firebase/firestore');
+    const { deleteDoc } = await import('firebase/firestore');
     await deleteDoc(doc(db, 'follows', `${myUid}_${targetUid}`));
-    try {
-      await updateDoc(doc(db, 'users', myUid), { followingCount: inc(-1) });
-      await updateDoc(doc(db, 'users', targetUid), { followerCount: inc(-1) });
-    } catch { /* non-critical */ }
     // Remove the follow notification (sender revoked the follow)
     try {
       await deleteDoc(doc(db, 'users', targetUid, 'notifications', `follow_${myUid}`));
@@ -859,7 +900,7 @@ async function _batchFetchPublicProfiles(
   uids: string[],
 ): Promise<FollowUser[]> {
   if (uids.length === 0 || !db) return [];
-  const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, 'users', uid))));
+  const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, PUBLIC_PROFILES, uid))));
   return snaps
     .filter((s) => s.exists())
     .map((s) => {

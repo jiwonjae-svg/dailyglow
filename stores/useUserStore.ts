@@ -833,6 +833,10 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ newBadgeEarned: null });
   },
 
+  clearNewFreezeGranted: () => {
+    set({ newFreezeGranted: false });
+  },
+
   checkTrialExpiry: () => {
     const { premiumTrialExpiry, isPremium } = get();
     if (!isPremium && premiumTrialExpiry) {

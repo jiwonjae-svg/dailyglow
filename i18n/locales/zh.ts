@@ -57,6 +57,8 @@
     allowPermission: '允许',
     processing: '正在识别文本...',
     recognized: '识别的文本：',
+    unavailable: '文字识别仅在开发构建中可用。\nExpo Go 不支持此功能。',
+    noTextFound: '未能识别到足够的文字。请确保整句内容清晰可见后重新拍摄。',
     match: '匹配度：',
     retake: '重拍',
     close: '关闭',

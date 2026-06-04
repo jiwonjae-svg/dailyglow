@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useTextRecognition } from '../hooks/useTextRecognition';
-import { textSimilarity } from '../utils/similarity';
+import { findBestOcrMatch } from '../utils/similarity';
 import { SIMILARITY_CONFIG } from '../constants/config';
 
 interface WriteAlongSheetProps { visible: boolean; quoteText: string; onClose: () => void; onSuccess: () => void; }
@@ -17,13 +17,15 @@ export default function WriteAlongSheet({ visible, quoteText, onClose, onSuccess
   const [permission, requestPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
-  const { recognizedText, isProcessing, processImage, reset } = useTextRecognition();
+  const { recognizedText, isProcessing, isAvailable, processImage, reset } = useTextRecognition();
 
-  const similarity = recognizedText ? textSimilarity(recognizedText, quoteText) : 0;
+  const ocrMatch = recognizedText ? findBestOcrMatch(recognizedText, quoteText) : { similarity: 0, matchedText: '' };
+  const similarity = ocrMatch.similarity;
   const isSuccess = similarity >= SIMILARITY_CONFIG.writeThreshold;
+  const diffText = ocrMatch.matchedText || recognizedText;
 
-  useEffect(() => { if (isSuccess) onSuccess(); }, [isSuccess]);
-  useEffect(() => { if (!visible) { setPhotoUri(null); reset(); } }, [visible]);
+  useEffect(() => { if (isSuccess) onSuccess(); }, [isSuccess, onSuccess]);
+  useEffect(() => { if (!visible) { setPhotoUri(null); reset(); } }, [visible, reset]);
 
   const takePhoto = async () => {
     if (!cameraRef.current) return;
@@ -47,6 +49,12 @@ export default function WriteAlongSheet({ visible, quoteText, onClose, onSuccess
             <Text style={[styles.quoteText, { color: colors.textPrimary }]}>{quoteText}</Text>
           </View>
 
+          {!isAvailable && (
+            <View style={styles.unavailableBox}>
+              <Text style={styles.unavailableText}>{t('write.unavailable')}</Text>
+            </View>
+          )}
+
           {!permission.granted ? (
             <View style={styles.permissionBox}>
               <Text style={[styles.permissionText, { color: colors.textSecondary }]}>{t('write.permissionNeeded')}</Text>
@@ -63,18 +71,22 @@ export default function WriteAlongSheet({ visible, quoteText, onClose, onSuccess
                   <Text style={[styles.processingText, { color: colors.textSecondary }]}>{t('write.processing')}</Text>
                 </View>
               )}
-              {recognizedText ? (
+              {!isProcessing && isAvailable ? (
                 <View style={[styles.resultBox, { backgroundColor: colors.surfaceAlt }]}>
                   <Text style={[styles.resultLabel, { color: colors.textMuted }]}>{t('write.recognized')}</Text>
-                  {/* Char-by-char diff: highlight matching/non-matching characters */}
-                  <Text style={styles.resultDiffText}>
-                    {quoteText.split('').map((char, i) => {
-                      const recChar = recognizedText[i];
-                      const matched = recChar != null && recChar.toLowerCase() === char.toLowerCase();
-                      const color = recChar == null ? colors.textMuted : matched ? colors.success : colors.error;
-                      return <Text key={i} style={{ color }}>{char}</Text>;
-                    })}
+                  <Text style={[styles.resultText, { color: colors.textSecondary }]}>
+                    {recognizedText || t('write.noTextFound')}
                   </Text>
+                  {recognizedText ? (
+                    <Text style={styles.resultDiffText}>
+                      {quoteText.split('').map((char, i) => {
+                        const recChar = diffText[i];
+                        const matched = recChar != null && recChar.toLowerCase() === char.toLowerCase();
+                        const color = recChar == null ? colors.textMuted : matched ? colors.success : colors.error;
+                        return <Text key={i} style={{ color }}>{char}</Text>;
+                      })}
+                    </Text>
+                  ) : null}
                   <Text style={[styles.similarityText, { color: colors.primary }]}>{t('write.match')} {Math.round(similarity * 100)}%</Text>
                 </View>
               ) : null}
@@ -109,6 +121,8 @@ const styles = StyleSheet.create({
   instruction: { ...Fonts.body, fontSize: FontSize.sm, marginBottom: Spacing.md, textAlign: 'center' },
   quoteBox: { padding: Spacing.md, borderRadius: BorderRadius.md, width: '100%', marginBottom: Spacing.md },
   quoteText: { ...Fonts.quote, fontSize: FontSize.md, textAlign: 'center', lineHeight: 26 },
+  unavailableBox: { backgroundColor: '#FFF3CD', borderRadius: BorderRadius.sm, padding: Spacing.sm, width: '100%', marginBottom: Spacing.md },
+  unavailableText: { ...Fonts.body, fontSize: FontSize.sm, color: '#856404', textAlign: 'center', lineHeight: 20 },
   permissionBox: { alignItems: 'center', padding: Spacing.lg },
   permissionText: { ...Fonts.body, fontSize: FontSize.md, marginBottom: Spacing.md },
   permissionButton: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full },

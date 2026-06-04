@@ -10,6 +10,9 @@ import * as admin from 'firebase-admin';
 admin.initializeApp();
 
 export { onLikeWrite } from './onLikeWrite';
+export { onFollowWrite } from './onFollowWrite';
+export { onReportWrite } from './onReportWrite';
+export { onCommunityQuoteCreated } from './onCommunityQuoteCreated';
 export { autoApprove }  from './autoApprove';
 export { notifyStatus } from './notifyStatus';
 export { schedulePersonalizedPush } from './smartNotifications';

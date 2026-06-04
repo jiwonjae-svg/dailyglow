@@ -18,7 +18,7 @@ const BATCH_SIZE = 400; // Firestore batch write limit is 500
 
 export const autoApprove = onSchedule('every 1 hours', async () => {
   const db = admin.firestore();
-  const cutoff = Date.now() - AUTO_APPROVE_AFTER_MS;
+  const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - AUTO_APPROVE_AFTER_MS);
 
   const snapshot = await db
     .collection('community_quotes')

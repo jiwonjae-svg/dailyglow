@@ -57,6 +57,8 @@ export default {
     allowPermission: 'Permitir',
     processing: 'Reconociendo texto...',
     recognized: 'Texto reconocido:',
+    unavailable: 'El reconocimiento de texto solo está disponible en una compilación de desarrollo.\nNo es compatible con Expo Go.',
+    noTextFound: 'No se pudo reconocer suficiente texto. Intenta tomar la foto otra vez mostrando claramente la cita completa.',
     match: 'Coincidencia:',
     retake: 'Volver a tomar',
     close: 'Cerrar',

@@ -64,7 +64,7 @@ if (-not $All -and $Files.Count -eq 0) {
   throw "Provide -Files for scoped staging, or use -All intentionally."
 }
 
-$statusBefore = Get-GitLines -Arguments @("status", "--porcelain")
+$statusBefore = @(Get-GitLines -Arguments @("status", "--porcelain"))
 if ($statusBefore.Count -eq 0) {
   Write-Host "No changes to commit."
   exit 0
@@ -86,7 +86,7 @@ if ($All) {
 
   Invoke-Checked -Command "git" -Arguments (@("add", "--") + $Files)
 
-  $remainingStatus = Get-GitLines -Arguments @("status", "--porcelain")
+  $remainingStatus = @(Get-GitLines -Arguments @("status", "--porcelain"))
   $outsideChanges = @()
   foreach ($line in $remainingStatus) {
     $path = $line.Substring(3).Trim()
@@ -104,7 +104,7 @@ if ($All) {
   }
 }
 
-$stagedFiles = Get-GitLines -Arguments @("diff", "--cached", "--name-only")
+$stagedFiles = @(Get-GitLines -Arguments @("diff", "--cached", "--name-only"))
 if ($stagedFiles.Count -eq 0) {
   throw "No staged changes to commit."
 }
@@ -126,8 +126,10 @@ foreach ($file in $stagedFiles) {
   }
 }
 
-$assetAdditions = Get-GitLines -Arguments @("diff", "--cached", "--name-only", "--diff-filter=A") |
-  Where-Object { (Normalize-RepoPath $_) -match "\.(png|jpe?g|gif|webp|svg|ico|mp4|mov|zip|pdf)$" }
+$assetAdditions = @(
+  Get-GitLines -Arguments @("diff", "--cached", "--name-only", "--diff-filter=A") |
+    Where-Object { (Normalize-RepoPath $_) -match "\.(png|jpe?g|gif|webp|svg|ico|mp4|mov|zip|pdf)$" }
+)
 
 if ($assetAdditions.Count -gt 0 -and -not $AllowAssets) {
   throw "Asset additions require -AllowAssets: $($assetAdditions -join ', ')"

@@ -10,7 +10,6 @@ import {
   submitCommunityQuote,
   reportCommunityQuote,
   checkServerRateLimit,
-  recordServerSubmission,
   updateCommunityQuote,
   deleteCommunityQuote,
   type CommunityQuote,
@@ -245,8 +244,6 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
 
     const result = await submitCommunityQuote(uid, submitterName, text, author, language, categories, submitterPhotoURL);
     if (result.success) {
-      // Record server-side submission timestamp
-      await recordServerSubmission(uid);
       // Keep local AsyncStorage in sync as a fast offline cache
       const updated = [...get().recentSubmissionTimes, Date.now()];
       set({ recentSubmissionTimes: updated });

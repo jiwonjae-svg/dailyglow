@@ -6,6 +6,7 @@ import { useUserStore } from '../stores/useUserStore';
 import type { Quote } from '../stores/useQuoteStore';
 import { fetchServerQuotesFromFirestore } from './firebaseConfig';
 import i18n from '../i18n';
+import { selectQuoteItems } from '../utils/quoteSelection';
 
 const CACHE_KEY = '@dailyglow_quotes_cache';
 const RECENT_IDS_KEY = '@dailyglow_recent_quote_ids';
@@ -94,37 +95,6 @@ async function saveRecentIds(ids: string[]): Promise<void> {
   }
 }
 
-/** O(n) Fisher-Yates shuffle — avoids the bias and O(n log n) cost of sort-based shuffles. */
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function scoreQuote(categories: Record<string, number>, selectedCats: string[]): number {
-  if (selectedCats.length === 0) return 0;
-  return selectedCats.reduce((sum, cat) => sum + (categories[cat] ?? 0), 0);
-}
-
-function pickOneByWeight(
-  candidates: typeof clientQuotes,
-  selectedCats: string[],
-): typeof clientQuotes[0] {
-  // Single pass — no intermediate array allocations.
-  let maxScore = -Infinity;
-  let maxIndices: number[] = [];
-  for (let i = 0; i < candidates.length; i++) {
-    const s = scoreQuote(candidates[i].categories, selectedCats);
-    if (s > maxScore) { maxScore = s; maxIndices = [i]; }
-    else if (s === maxScore) { maxIndices.push(i); }
-  }
-  const idx = maxIndices[Math.floor(Math.random() * maxIndices.length)];
-  return candidates[idx];
-}
-
 async function selectQuotes(count: number): Promise<Quote[]> {
   const lang = i18n.language;
   const selectedCats = useUserStore.getState().selectedCategories ?? [];
@@ -133,41 +103,19 @@ async function selectQuotes(count: number): Promise<Quote[]> {
   const serverQuotes = await getServerQuotes();
   const allQuotes: CrawledQuote[] = [...clientQuotes, ...serverQuotes];
 
-  let recentIds = await getRecentIds();
-  const recentSet = new Set(recentIds);
-  let pool = allQuotes.filter((q) => !recentSet.has(q.id));
-  if (pool.length < CANDIDATE_COUNT) {
-    recentIds = [];
-    pool = allQuotes;
-  }
-  const available = pool;
+  const selection = selectQuoteItems({
+    quotes: allQuotes,
+    recentIds: await getRecentIds(),
+    selectedCategories: selectedCats,
+    count,
+    candidateCount: CANDIDATE_COUNT,
+    recentLimit: RECENT_EXCLUDE,
+  });
 
-  const result: Quote[] = [];
-  const usedRecent: string[] = [...recentIds];
-  // Shuffle once — O(n) Fisher-Yates — reused across all picks in this batch.
-  const shuffled = shuffle(available);
-
-  for (let i = 0; i < count; i++) {
-    const excludeSet = new Set(usedRecent);
-    let candidates = shuffled.filter((q) => !excludeSet.has(q.id)).slice(0, CANDIDATE_COUNT);
-    // If all remaining quotes are in the recent list, fall back to the full shuffled pool.
-    if (candidates.length === 0) {
-      candidates = shuffled.slice(0, Math.min(CANDIDATE_COUNT, shuffled.length));
-    }
-
-    const chosen = pickOneByWeight(candidates, selectedCats);
-    const q = makeQuote(chosen, lang);
-    if (!q) continue;
-    result.push(q);
-
-    usedRecent.push(chosen.id);
-    if (usedRecent.length > RECENT_EXCLUDE) {
-      usedRecent.shift();
-    }
-  }
-
-  await saveRecentIds(usedRecent);
-  return result;
+  await saveRecentIds(selection.nextRecentIds);
+  return selection.items
+    .map((item) => makeQuote(item, lang))
+    .filter((quote): quote is Quote => quote !== null);
 }
 
 /** Module-level flag prevents concurrent batch fetches (guards against rapid scrolling). */

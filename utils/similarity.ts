@@ -2,23 +2,77 @@
  * Levenshtein distance-based text similarity (0.0 ~ 1.0).
  */
 export function textSimilarity(a: string, b: string): number {
-  const s1 = normalize(a);
-  const s2 = normalize(b);
-
-  if (s1 === s2) return 1;
-  if (s1.length === 0 || s2.length === 0) return 0;
-
-  const maxLen = Math.max(s1.length, s2.length);
-  const dist = levenshtein(s1, s2);
-  return 1 - dist / maxLen;
+  return similarityFromNormalized(normalize(a), normalize(b));
 }
 
 function normalize(s: string): string {
   return s
-    .replace(/\s+/g, ' ')
-    .trim()
+    .normalize('NFKC')
     .toLowerCase()
-    .replace(/[.,!?;:'"()]/g, '');
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[.,!?;:'"()\[\]{}<>`~@#$%^&*_+=\\/|…“”‘’«»「」『』【】〈〉《》]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function removeWhitespace(s: string): string {
+  return s.replace(/\s+/g, '');
+}
+
+function similarityFromNormalized(a: string, b: string): number {
+  if (a === b) return 1;
+  if (a.length === 0 || b.length === 0) return 0;
+
+  const maxLen = Math.max(a.length, b.length);
+  const dist = levenshtein(a, b);
+  return 1 - dist / maxLen;
+}
+
+function buildOcrCandidates(text: string): string[] {
+  const trimmed = text.replace(/\r/g, '').trim();
+  if (!trimmed) return [];
+
+  const lines = trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const candidates = new Set<string>([trimmed]);
+  if (lines.length > 0) {
+    candidates.add(lines.join(' '));
+    for (const line of lines) candidates.add(line);
+
+    const maxWindow = Math.min(lines.length, 4);
+    for (let windowSize = 2; windowSize <= maxWindow; windowSize++) {
+      for (let start = 0; start <= lines.length - windowSize; start++) {
+        candidates.add(lines.slice(start, start + windowSize).join(' '));
+      }
+    }
+  }
+
+  return [...candidates];
+}
+
+export function findBestOcrMatch(recognizedText: string, originalText: string): { similarity: number; matchedText: string } {
+  const candidates = buildOcrCandidates(recognizedText);
+  if (candidates.length === 0) return { similarity: 0, matchedText: '' };
+
+  const normalizedOriginal = normalize(originalText);
+  const compactOriginal = removeWhitespace(normalizedOriginal);
+
+  let bestMatch = { similarity: 0, matchedText: candidates[0] };
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalize(candidate);
+    const directSimilarity = similarityFromNormalized(normalizedCandidate, normalizedOriginal);
+    const compactSimilarity = similarityFromNormalized(removeWhitespace(normalizedCandidate), compactOriginal);
+    const similarity = Math.max(directSimilarity, compactSimilarity);
+
+    if (similarity > bestMatch.similarity) {
+      bestMatch = { similarity, matchedText: candidate };
+    }
+  }
+
+  return bestMatch;
 }
 
 function levenshtein(a: string, b: string): number {

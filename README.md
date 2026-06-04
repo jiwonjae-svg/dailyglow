@@ -1,341 +1,196 @@
-<div align="center">
+# DailyGlow
 
-# ✨ DailyGlow
+DailyGlow is an Expo/React Native mobile app for building a daily quote habit. It combines a curated quote feed with speak-along, type-along, and write-along practice modes, then records progress through local state with optional Firebase sync.
 
-**Your Daily Quote Companion**
+This repository is maintained as a Japan-focused software engineering portfolio project. The documentation emphasizes product readiness, reliability, multilingual support, Firebase security, and testable core logic without claiming production usage, user counts, certifications, revenue, or store performance.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/jiwonjae-svg/dailyglow)
-[![Expo SDK](https://img.shields.io/badge/Expo-SDK%2054-blue.svg?logo=expo)](https://expo.dev)
-[![React Native](https://img.shields.io/badge/React%20Native-0.81-blue.svg?logo=react)](https://reactnative.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+## Product Explanation (English / Japanese)
 
-*Curated quotes every day — speak, write, or type along to grow.*
+### English
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Architecture](#-architecture) • [Contributing](#-contributing)
+DailyGlow helps users turn short positive quotes into a repeatable daily practice. The core experience is a mobile quote feed backed by bundled offline data, with optional cloud-backed account sync and community features when Firebase is configured. Users can read, listen, speak, type, or handwrite quotes, while the app tracks activity through streak and calendar-style progress views.
 
----
+From an engineering perspective, the project demonstrates a practical mobile product structure: offline-first data loading, native capability guards, local persistence, multilingual UI, Firebase integration, Firestore rules, and unit-tested text matching and quote selection logic.
 
-</div>
+### 日本語
 
-## 🎯 What is DailyGlow?
+DailyGlow は、短い前向きな名言を毎日の習慣に変えるためのモバイルアプリです。オフラインで使える同梱データを中心に、Firebase を設定した場合はアカウント同期やコミュニティ機能も利用できます。ユーザーは名言を読むだけでなく、音読、タイピング、手書き練習を通して継続的に取り組めます。
 
-DailyGlow is a **mobile app for daily positive habits** built around a curated library of 2,500+ quotes. Each day the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
+エンジニアリング面では、オフラインファーストのデータ設計、ネイティブ機能の安全な呼び出し、ローカル永続化、多言語 UI、Firebase 連携、Firestore Security Rules、テスト可能な名言選択ロジックを示すポートフォリオとして整理しています。
 
-Perfect for:
-- 📖 **Learners** building a daily reading or writing habit
-- 🧘 **Mindfulness seekers** looking for daily positive reinforcement
-- 🌏 **Language learners** practicing in Korean, English, Japanese, or Chinese
-- 💪 **Self-improvement enthusiasts** who love streaks and progress tracking
+## Key Features
 
-## ✨ Features
+- Quote feed with category-aware selection, recent-quote exclusion, cached batches, and bundled fallback data.
+- Speak-along practice using text-to-speech, speech recognition, and similarity scoring.
+- Type-along practice with character-level feedback.
+- Write-along practice using camera capture, OCR when the native module is available, and best-match text comparison.
+- Progress tracking with daily activity, streak data, bookmarks, badges, and a grass-style calendar view.
+- Multilingual UI and quote translations for Korean, English, Spanish, Japanese, and Chinese.
+- Optional Firebase Auth, Firestore sync, community quote submission, likes, reports, and profile data.
+- Optional notifications, sharing, home-screen widget data, ads, and premium/purchase code paths.
 
-### 📝 Curated Quotes
-- **2,500+ Quotes**: Sourced from Quotable, Wikiquote, and Project Gutenberg, cleaned and deduplicated
-- **150+ Categories**: Organized into 5 themes (Life/Growth, Emotion/Relationship, Work/Business, Nature/Philosophy, Special)
-- **Multi-Select**: Choose up to 10 categories to personalize your feed
-- **Multi-language**: Quotes available in Korean, English, Japanese, and Chinese
-- **Offline-First**: 800 quotes bundled with the app; 1,704 more streamed from Firestore when online
-- **Smart Selection**: Category weight scoring picks the most relevant quote from each candidate batch
+## Tech Stack
 
-### 📱 Engaging Activities
-- **Speak Along** 🎤: Read quotes aloud with speech recognition & similarity matching
-- **Write Along** ✍️: Handwrite quotes, capture with camera, verify via OCR
-- **Type Along** ⌨️: Real-time character-by-character typing with visual highlights
-- **Praise**: Warm encouragement after every completed activity (from a curated library of 80+ phrases per language)
+| Area | Technology |
+| --- | --- |
+| Mobile framework | Expo SDK 54, React Native 0.81 |
+| Language | TypeScript |
+| Routing | Expo Router |
+| State | Zustand |
+| Local persistence | AsyncStorage |
+| Cloud backend | Firebase Auth, Firestore, Firebase Cloud Functions |
+| Native capabilities | Expo Camera, Expo Speech, Expo Notifications, speech recognition, ML Kit OCR |
+| Internationalization | i18next, react-i18next, expo-localization |
+| Monetization paths | Google Mobile Ads, RevenueCat packages |
+| Verification | TypeScript build, Node test runner, custom secret scan |
 
-### 📊 Progress & Gamification
-- **Grass Field**: GitHub-style 365-day activity contribution graph with touch-to-view details
-- **Daily Streak**: Consecutive day tracking with special milestone rewards
-- **Bookmark**: Save your favorite quotes for later
-- **Statistics**: Total quotes viewed, today's viewed quotes list, and active days tracked
-- **Auto-Read**: Optional automatic TTS when viewing new quotes
+## Architecture And Data Flow
 
-### � Community
-- **Community Feed**: Browse community-submitted quotes in a dedicated feed tab
-- **Submit a Quote**: Authenticated users can submit their own quotes (3 per day, 10–500 chars)
-- **Like**: Heart-react to community quotes with optimistic UI updates
-- **Report**: Flag inappropriate content (auto-rejected at threshold)
-- **Moderation**: Submitted quotes enter `pending` state and appear after approval
+DailyGlow uses a layered client architecture:
 
-### �🔐 Account & Sync
-- **Google OAuth**: One-tap sign-in with Google
-- **Email Auth**: Traditional email/password with password reset
-- **Guest Mode**: Continue without account
-- **Firebase Sync**: Data synced across devices when logged in
+1. `app/` defines Expo Router screens and tab navigation.
+2. `components/` renders quote cards, activity sheets, modals, settings, profile, and community UI.
+3. `stores/` keeps session and persisted state in Zustand stores.
+4. `services/` handles quote loading, Firebase/Auth/Firestore access, community operations, notifications, sharing, ads, purchases, widgets, and logging.
+5. `data/` provides bundled quote, category, and praise datasets for offline-first local behavior.
+6. `utils/` contains testable pure logic such as text similarity and quote selection.
+7. `functions/` contains the Firebase Cloud Functions project for backend automation.
 
-### 🌍 Personalization
-- **5 Languages**: Korean 🇰🇷, English 🇺🇸, Spanish 🇪🇸, Japanese 🇯🇵, Chinese 🇨🇳
-- **Dark Mode**: Full dark theme, toggleable in settings
-- **Notification**: Daily 9 AM reminder (configurable)
-- **Premium**: Ad-free experience upgrade
+Quote loading flows through `services/quoteService.ts`: bundled quotes are always available, Firestore quote chunks are fetched when Firebase is configured, server quotes are cached in AsyncStorage, and recent quote IDs are excluded to reduce immediate repetition. UI components consume the resulting quote batches through `stores/useQuoteStore.ts`.
 
-### 📣 Sharing & Widgets
-- **SNS Share**: Share quotes to any social platform
-- **Home Screen Widget**: Today's quote on your home screen (Android & iOS) — tap to jump to that quote
-- **Widget Refresh**: Tap the refresh button to cycle through a curated buffer of quotes
-- **Ads**: AdMob interstitial every 5 quotes (Glow+-exempt)
+User data flows through `stores/useUserStore.ts`: local settings and progress persist to AsyncStorage, while logged-in accounts can sync selected profile, badge, bookmark, streak, and activity data through Firestore service helpers.
 
-### 💎 Glow+ Premium
-- **Ad-free**: No interstitial ads
-- **Unlimited widget refresh**: Buffer grows as you scroll (free: 5 quotes, Glow+: 30 quotes)
-- **7-day free trial** available (persistent across devices via cloud sync)
+Native integrations are guarded at runtime so unsupported environments can fail gracefully instead of crashing the app.
 
-## 📦 Installation
+## Quote Data Pipeline
 
-### Prerequisites
-- Node.js 18+
-- [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli`)
-- iOS Simulator / Android Emulator **or** Expo Go app
+DailyGlow keeps the quote pipeline small enough to reason about and test:
 
-### Quick Start
+1. Bundled offline quotes: `data/quotesClient.json` is loaded through `data/quotes.ts`, so the quote feed can work without network access or Firebase credentials.
+2. Optional server quotes: `services/firebaseConfig.ts` can fetch Firestore quote chunks from `quotes_catalog`; `services/quoteService.ts` stores them in AsyncStorage with a 7-day cache window and falls back to stale cache or bundled quotes if fetching fails.
+3. Category weighting: each quote can carry category weights. `utils/quoteSelection.ts` scores the selected user categories and chooses the highest-scoring quote from each candidate window.
+4. Recency buffer: recently selected quote IDs are stored in AsyncStorage under `@dailyglow_recent_quote_ids`. The selector excludes those IDs while enough candidates remain, then resets the buffer when the available pool becomes too small.
+5. Multilingual support: quote text uses the active i18n language when a translation exists and falls back to the original quote text otherwise. UI strings are organized under `i18n/locales/`.
+6. UI consumption: selected items are mapped into the app-level `Quote` shape with author, source, top category, timestamp, and gradient metadata before entering `useQuoteStore`.
+
+The pure selection rules are covered by unit tests in `tests/quoteSelection.test.mjs`, while storage and Firebase fallback remain inside `quoteService`.
+
+## Firebase Security Rules
+
+Firestore rules are defined in `firestore.rules`. The current model protects data with these boundaries:
+
+- `quotes_catalog` is public read-only; clients cannot write quote catalog documents.
+- `users/{userId}` is readable only by the owner or an admin. Owner writes are allowlisted and cannot mutate `isAdmin`, `isDisabled`, premium status, social counters, or submission counters.
+- `public_profiles/{userId}` is public read for social/profile UI. Owners can update display fields, while follower/following counters are maintained by Cloud Functions.
+- `users/{userId}/quoteHistory` and `users/{userId}/grassHistory` are owner-only read/write subcollections for private quote and activity history.
+- `usernames/{username}` is public read for availability checks, but creation/deletion must point to the authenticated user's UID and updates are blocked.
+- `community_quotes` is public read. Authenticated users can create `pending` submissions tied to their UID, authors can edit limited fields, admins can update status/disable flags, and authors can delete their own posts.
+- `community_likes`, `community_reports`, `follows`, and `quoteRatings` bind document IDs or fields to `request.auth.uid` so users can only create or remove their own interactions.
+- Like, report, follow, and submission counters are server-owned through Firebase Cloud Functions, not arbitrary client updates.
+- `activities` and top-level `reports` are create-only for authenticated users and are not readable or mutable by clients.
+
+## Screenshots Placeholders
+
+Screenshots should be added before portfolio publication or store-review preparation. Suggested placeholders:
+
+| Locale | Home feed | Practice flow | Settings/profile |
+| --- | --- | --- | --- |
+| Korean | `docs/screenshots/ko-home.png` | `docs/screenshots/ko-practice.png` | `docs/screenshots/ko-settings.png` |
+| English | `docs/screenshots/en-home.png` | `docs/screenshots/en-practice.png` | `docs/screenshots/en-settings.png` |
+| Japanese | `docs/screenshots/ja-home.png` | `docs/screenshots/ja-practice.png` | `docs/screenshots/ja-settings.png` |
+
+## Technical Challenges
+
+- Keeping the app usable without Firebase configuration while still supporting cloud sync when credentials exist.
+- Preventing native-module crashes in Expo Go or unsupported builds by checking availability before using OCR, speech recognition, ads, notifications, and monitoring.
+- Maintaining consistent local state when switching between guest mode, login, logout, and cloud restore.
+- Matching speech/OCR text against quotes across punctuation, whitespace, case, and line-break differences.
+- Keeping community submission logic bounded with input sanitization, ownership checks, reports, and Firestore-backed counters.
+- Documenting mobile setup clearly without implying that optional native services are required for every local workflow.
+
+## Release Readiness Checklist
+
+- [ ] Android internal testing: build a signed internal test artifact, install on physical devices, verify sign-in, quote feed, practice flows, notifications, ads disabled/enabled states, and offline behavior.
+- [ ] iOS/TestFlight readiness: confirm bundle identifier, Apple signing, required privacy strings, Google/Firebase config, speech/camera behavior, and TestFlight build upload.
+- [ ] Privacy policy: keep `privacy-policy.md` current with auth, local storage, Firebase, ads, purchases, notifications, speech/OCR, and community content handling.
+- [ ] App permissions: review camera, microphone, speech recognition, notifications, internet, and platform-specific permission copy before store submission.
+- [ ] Crash/error logging plan: confirm Sentry or another crash reporting path is configured for production builds, with no sensitive quote/user content logged.
+- [ ] Firebase rules review: deploy and test `firestore.rules` with emulator or Firebase rules tests before public release.
+- [ ] Multilingual QA: verify KO/EN/JA core screens for layout overflow, truncation, and locale-specific copy quality.
+- [ ] Screenshot set: capture KO/EN/JA home, practice, and settings/profile screens listed above.
+
+## What I Improved
+
+- Replaced the previous corrupted, marketing-heavy README with a portfolio-focused technical README.
+- Added `AGENTS.md` so future agent changes follow the same reliability-first constraints.
+- Added repeatable `lint`, `test`, and `build` scripts to `package.json`.
+- Extracted quote selection into `utils/quoteSelection.ts` so category weighting and recency behavior can be unit tested.
+- Added Node test coverage for `utils/similarity.ts`, `utils/quoteSelection.ts`, and `stores/useQuoteStore.ts`.
+- Fixed small TypeScript build issues around Firestore user count fields and a missing Zustand action implementation.
+
+## How To Run Locally
+
+Prerequisites:
+
+- Node.js 20 or newer
+- npm
+- Expo-compatible Android or iOS environment for native builds
+
+Install dependencies:
 
 ```bash
-# Clone the repository
-git clone https://github.com/jiwonjae-svg/dailyglow.git
-cd dailyglow
-
-# Install dependencies
 npm install
-
-# Start with Expo Go (limited features)
-npx expo start --clear
 ```
 
-### Development Build (Recommended — Full Features)
+Create a local environment file if you need Firebase, Google sign-in, RevenueCat, or other configured services:
 
-```bash
-# Android
-npx expo run:android
-
-# iOS
-npx expo run:ios
-```
-
-> **Note**: Features like Speech Recognition, AdMob, and Push Notifications require a development build. They are not supported in Expo Go.
-
-### Configure Environment Variables
-
-1. Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
 
-2. Fill in your API keys in `.env`:
-```env
-# Firebase
-EXPO_PUBLIC_FIREBASE_API_KEY=...
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
+PowerShell equivalent:
 
-# Google OAuth (required for Google Sign-In)
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=...apps.googleusercontent.com
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...apps.googleusercontent.com
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...apps.googleusercontent.com
+```powershell
+Copy-Item .env.example .env
 ```
 
-See `.env.example` for detailed instructions on obtaining each key.
+Start the Expo development server:
 
-> The app runs fully offline without any API keys — 800 bundled quotes and local storage handle everything.
-
-## 🚀 Usage
-
-### First Launch Flow
-
-1. **Login Screen**: Sign in with Google, email, or skip
-2. **Onboarding**: 4-slide tutorial of key features
-3. **Home Feed**: Vertical snap-scroll quote cards
-
-### Quote Activities
-
-| Activity | How to Use |
-|----------|-----------|
-| **Speak Along** 🎤 | Tap mic button → Read the quote aloud → See match percentage |
-| **Write Along** ✍️ | Tap pencil button → Handwrite on paper → Take photo → Verify |
-| **Type Along** ⌨️ | Tap keyboard button → Type quote character by character → Watch highlights |
-
-### Settings
-
-| Option | Description |
-|--------|-------------|
-| **Language** | Tap → Language picker modal → Select language → Quotes reload automatically |
-| **Dark Mode** | Toggle for full dark theme |
-| **Category** | Filter quote themes |
-| **Daily Reminder** | Push notification at 9 AM |
-| **Glow+** | Remove all ads + larger widget refresh buffer |
-| **Account** | Google / email login, logout |
-
-### Keyboard Shortcuts (TypeAlong)
-
-| Input | Effect |
-|-------|--------|
-| Type correct char | Turns green |
-| Type wrong char | Turns red |
-| Complete quote | Triggers praise & grass fill |
-
-## 📁 Project Structure
-
-```
-dailyglow/
-│
-├── 📄 app.json                    # Expo config (plugins, permissions)
-├── 📄 package.json                # Dependencies
-├── 📄 tsconfig.json               # TypeScript config
-│
-├── 📁 app/                        # File-based routing (expo-router)
-│   ├── _layout.tsx                # Root layout: Login → Onboarding → App
-│   ├── login.tsx                  # Login / Sign up / Forgot password
-│   └── (tabs)/
-│       ├── _layout.tsx            # Tab bar (Quotes, Grass, Settings)
-│       ├── index.tsx              # Home — snap-scroll quote cards
-│       ├── grass.tsx              # Activity grass field + streak
-│       └── settings.tsx           # All user settings
-│
-├── 📁 components/                 # Reusable UI
-│   ├── QuoteCard.tsx              # Quote card with bookmark, share, activities
-│   ├── OnboardingScreen.tsx       # 4-slide first-run tutorial
-│   ├── SpeakAlongSheet.tsx        # Speech recognition bottom sheet
-│   ├── WriteAlongSheet.tsx        # Camera + OCR bottom sheet
-│   ├── TypeAlongSheet.tsx         # Typing challenge with highlights
-│   ├── PraiseModal.tsx            # Celebration modal with TTS
-│   ├── GrassGrid.tsx              # 365-day contribution grid with touch details
-│   ├── LanguagePickerModal.tsx    # Language selection modal
-│   ├── CategoryPickerModal.tsx    # Hierarchical category selection (150+ categories)
-│   └── AdInterstitial.tsx         # AdMob interstitial manager
-│   ├── CommunityBadge.tsx         # '👥 Community' pill badge for community cards
-│   └── SubmitQuoteSheet.tsx       # Bottom sheet for submitting community quotes
-│
-├── 📁 services/                   # Business logic & external services
-│   ├── authService.ts             # Firebase Auth: Google, Email, Password Reset
-│   ├── firebaseConfig.ts          # Firestore init, server quotes loader, persistence
-│   ├── quoteService.ts            # Quote selection, caching, offline/online strategy
-│   ├── communityService.ts        # Firestore CRUD: community_quotes, likes, reports
-│   ├── praiseService.ts           # Praise selection (seed library)
-│   ├── notificationService.ts     # Push notifications (Expo Go safe)
-│   ├── shareService.ts            # SNS sharing
-│   ├── sentryService.ts           # Error monitoring (production only)
-│   ├── adService.ts               # AdMob logic
-│   └── widgetService.ts           # Home screen widget data
-│
-├── 📁 stores/                     # Zustand state management
-│   ├── useQuoteStore.ts           # Quote list state
-│   ├── useGrassStore.ts           # Daily activity data
-│   ├── useCommunityStore.ts       # Community feed, likes, submission rate limit
-│   └── useUserStore.ts            # Auth, prefs, bookmarks, streak
-│
-├── 📁 hooks/                      # Custom React hooks
-│   ├── useTTS.ts                  # Text-to-speech (expo-speech)
-│   ├── useSpeechRecognition.ts    # Speech recognition (Expo Go safe)
-│   ├── useTextRecognition.ts      # OCR placeholder
-│   └── useThemeColors.ts          # Dark/light theme colors
-│
-├── 📁 i18n/                       # Internationalization
-│   ├── index.ts                   # i18next config + language detection
-│   └── locales/
-│       ├── ko.ts                  # Korean
-│       ├── en.ts                  # English
-│       ├── es.ts                  # Spanish
-│       ├── ja.ts                  # Japanese
-│       └── zh.ts                  # Chinese
-│
-├── 📁 constants/                  # Configuration
-│   ├── theme.ts                   # LightColors + DarkColors
-│   └── config.ts                  # API keys & app settings
-│
-├── 📁 data/                       # Quote library & seed data
-│   ├── quotes.ts                  # Client-side quote loader
-│   ├── quotesClient.json          # 800 bundled quotes (offline-available)
-│   ├── quotesServer.json          # 1,704 server quotes (uploaded to Firestore)
-│   ├── seedPraises.ts             # 80+ praise messages per language (ko/en/ja/zh)
-│   └── categories.ts              # 150+ hierarchical categories
-│
-└── 📁 utils/                      # Utilities
-    ├── similarity.ts              # Levenshtein text similarity
-    └── dateUtils.ts               # Date helpers
+```bash
+npm start
 ```
 
-## 🏗️ Architecture
+Run a native development build when testing device-only capabilities:
 
-DailyGlow follows a **layered architecture** with clean separation of concerns:
-
-```
-┌──────────────────────────────────────────────┐
-│           Presentation Layer                  │  ← app/, components/
-│     (expo-router, React Native screens)       │
-├──────────────────────────────────────────────┤
-│           State Layer (Zustand)               │  ← stores/
-│   (quotes, grass, user prefs, auth, streak)   │
-├──────────────────────────────────────────────┤
-│           Service Layer                       │  ← services/
-│   (Firebase, Notifications, Ads, Praise)      │
-├──────────────────────────────────────────────┤
-│           Data Layer                          │  ← AsyncStorage + Firestore
-│   (offline-first: local cache → cloud sync)   │
-└──────────────────────────────────────────────┘
+```bash
+npm run android
+npm run ios
 ```
 
-### Offline-First Strategy
+Some features, including OCR, speech recognition, push notifications, ads, purchases, and native widgets, require a development build and valid native configuration. The bundled quote flow should remain usable without cloud credentials.
 
+## Tests
+
+Run the repository checks from the root:
+
+```bash
+npm run lint
+npm test
+npm run build
 ```
-Online:  Firestore server quotes (1,704) + bundled client quotes (800) = 2,504 pool
-Offline: AsyncStorage 7-day cache of server quotes + bundled client quotes (800)
-         └→ If no cache: bundled client quotes only (800)
-```
 
-### Expo Go Compatibility
+Current automated coverage includes:
 
-Modules incompatible with Expo Go are conditionally loaded:
+- `tests/similarity.test.mjs`: text normalization, speech/OCR similarity, and typing match status.
+- `tests/quoteSelection.test.mjs`: category weighting, recency-aware pool selection, and recency buffer updates.
+- `tests/quoteStore.test.mjs`: practical Zustand quote store state transitions.
 
-| Module | Strategy |
-|--------|----------|
-| `expo-notifications` | `require()` inside function, guarded by `isExpoGo` |
-| `expo-speech-recognition` | `try/catch` dynamic require with `isAvailable` flag |
-| `react-native-google-mobile-ads` | `Constants.executionEnvironment` guard |
-| `@sentry/react-native` | Production-only, skipped in `__DEV__` |
+`npm run lint` runs the repository secret scan, and `npm run build` runs TypeScript with `--noEmit`.
 
-## 🔧 Technology Stack
+## Japanese Summary
 
-| Category | Technology | Purpose |
-|----------|-----------|---------|
-| **Framework** | Expo SDK 54 + React Native 0.81 | Mobile app (iOS + Android) |
-| **Language** | TypeScript 5.9 | Type-safe development |
-| **Navigation** | expo-router 6 | File-based routing |
-| **Auth** | Firebase Auth + expo-auth-session | Google OAuth + Email |
-| **Database** | Firebase Firestore + AsyncStorage | Cloud quotes + offline cache |
-| **State** | Zustand 5 | Lightweight state management |
-| **TTS** | expo-speech | Text-to-speech output |
-| **Speech** | expo-speech-recognition | Voice recognition input |
-| **i18n** | i18next + react-i18next | Multi-language support |
-| **Animations** | react-native-reanimated 4 | Smooth UI animations |
-| **Ads** | react-native-google-mobile-ads | AdMob interstitials |
-| **Monitoring** | @sentry/react-native | Production crash reporting |
-| **Notifications** | expo-notifications | Daily reminders |
+DailyGlow は、毎日の名言を「読む」だけで終わらせず、音読、タイピング、手書き練習に変えるモバイルアプリです。日本向けポートフォリオとして、機能の多さよりも、オフライン対応、Firebase セキュリティ、多言語 UI、テスト可能なロジック、リリース準備の説明を重視しています。
 
-## ⚡ Performance
+## License
 
-- **New Architecture**: Fabric + TurboModules enabled (`newArchEnabled: true`)
-- **Snap Scrolling**: Native `pagingEnabled` FlatList for 60fps transitions
-- **Quote Prefetch**: Fetches next batch 3 quotes before the end of the list
-- **Offline-First**: Seed quotes load instantly, API runs in background
-- **Conditional Loading**: Native modules loaded lazily to prevent Expo Go crashes
-
-## 🛡️ Privacy & Security
-
-- ✅ **No tracking** — zero analytics or telemetry
-- ✅ **Local-first** — all data stored on device by default
-- ✅ **Optional cloud sync** — only when logged in to Firebase
-- ✅ **Open source** — audit the code yourself
-- ✅ **Input sanitization** — HTML tags, scripts, and event handlers blocked on community quote submissions
-- ✅ **Firestore security rules** — per-field write restrictions; clients cannot modify `status`, `submitterId`, or others' data
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-## 📄 License
-
-MIT © [DailyGlow Team](https://github.com/jiwonjae-svg/dailyglow)
+MIT. See [LICENSE](LICENSE).

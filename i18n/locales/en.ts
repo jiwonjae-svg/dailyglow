@@ -57,6 +57,8 @@ export default {
     allowPermission: 'Allow',
     processing: 'Recognizing text...',
     recognized: 'Recognized text:',
+    unavailable: 'Text recognition is only available in a dev build.\nNot supported in Expo Go.',
+    noTextFound: 'Could not recognize enough text. Try retaking the photo with the full quote clearly visible.',
     match: 'Match:',
     retake: 'Retake',
     close: 'Close',

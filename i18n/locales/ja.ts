@@ -57,6 +57,8 @@ export default {
     allowPermission: '許可',
     processing: 'テキスト認識中...',
     recognized: '認識されたテキスト:',
+    unavailable: 'テキスト認識は開発ビルドでのみ利用できます。\nExpo Go ではサポートされません。',
+    noTextFound: '十分なテキストを認識できませんでした。文章全体がはっきり写るようにもう一度撮影してください。',
     match: '一致度:',
     retake: '再撮影',
     close: '閉じる',

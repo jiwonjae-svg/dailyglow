@@ -2,192 +2,386 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── 관리자 헬퍼 ─────────────────────────────────────────────────────
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
     function isAdmin() {
-      return request.auth != null
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    // ── 기존 컬렉션 ─────────────────────────────────────────────────────
+    function validText(value, minLength, maxLength) {
+      return value is string
+        && value.size() >= minLength
+        && value.size() <= maxLength;
+    }
 
-    // 서버 명언 카탈로그: 공개 읽기 전용
+    function validOptionalString(value, maxLength) {
+      return value == null || (value is string && value.size() <= maxLength);
+    }
+
+    function validUsername(value) {
+      return value is string
+        && value.matches('^[A-Za-z0-9_-]{3,20}$');
+    }
+
+    function validOptionalUsername(value) {
+      return value == null || validUsername(value);
+    }
+
+    function validDocId(value, maxLength) {
+      return value is string
+        && value.size() >= 1
+        && value.size() <= maxLength
+        && value.matches('^[^/]+$');
+    }
+
     match /quotes_catalog/{doc} {
       allow read: if true;
       allow write: if false;
     }
 
-    // 사용자 데이터:
-    //   - 읽기: 인증된 모든 사용자 (공개 프로필 지원)
-    //   - 생성/삭제: 본인만
-    //   - 업데이트: 본인이거나, followerCount만 ±1 변경인 경우 허용
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create, delete: if request.auth != null && request.auth.uid == userId;
-      allow update: if (request.auth != null && request.auth.uid == userId)
-        || (request.auth != null
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followerCount'])
-            && (request.resource.data.followerCount == resource.data.followerCount + 1
-                || request.resource.data.followerCount == resource.data.followerCount - 1))
-        || (request.auth != null
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingCount'])
-            && (request.resource.data.followingCount == resource.data.followingCount + 1
-                || request.resource.data.followingCount == resource.data.followingCount - 1))
-        // 관리자: isDisabled 필드만 수정 가능
-        || (isAdmin()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDisabled']));
+      allow read: if isOwner(userId) || isAdmin();
+
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'photoURL',
+          'lastLogin',
+          'createdAt',
+          'provider',
+          'username',
+          'bio',
+          'settings',
+          'streak',
+          'badges',
+          'badgeDates',
+          'fcmToken',
+          'followerCount',
+          'followingCount'
+        ])
+        && !request.resource.data.keys().hasAny([
+          'isAdmin',
+          'isDisabled',
+          'isPremium',
+          'premiumPurchasedAt',
+          'communitySubmissions'
+        ])
+        && (!request.resource.data.keys().hasAny(['username'])
+          || validOptionalUsername(request.resource.data.username))
+        && request.resource.data.lastLogin == request.time
+        && (!request.resource.data.keys().hasAny(['createdAt'])
+          || request.resource.data.createdAt == request.time)
+        && (!request.resource.data.keys().hasAny(['followerCount']) || request.resource.data.followerCount == 0)
+        && (!request.resource.data.keys().hasAny(['followingCount']) || request.resource.data.followingCount == 0);
+
+      allow update: if (
+          isOwner(userId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'uid',
+            'email',
+            'displayName',
+            'photoURL',
+            'lastLogin',
+            'provider',
+            'username',
+            'bio',
+            'settings',
+            'streak',
+            'badges',
+            'badgeDates',
+            'fcmToken'
+          ])
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'isAdmin',
+            'isDisabled',
+            'isPremium',
+            'premiumPurchasedAt',
+            'followerCount',
+            'followingCount',
+            'communitySubmissions'
+          ])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['username'])
+            || validOptionalUsername(request.resource.data.username))
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastLogin'])
+            || request.resource.data.lastLogin == request.time)
+        )
+        || (
+          isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDisabled'])
+        );
+
+      allow delete: if isOwner(userId);
     }
 
-    // 사용자명 인덱스: 누구나 읽기(가용성 확인), 본인 uid로만 생성/삭제
+    match /public_profiles/{userId} {
+      allow read: if true;
+
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'username',
+          'photoURL',
+          'bio',
+          'followerCount',
+          'followingCount',
+          'updatedAt'
+        ])
+        && validOptionalString(request.resource.data.displayName, 60)
+        && validOptionalUsername(request.resource.data.username)
+        && validOptionalString(request.resource.data.photoURL, 500)
+        && validOptionalString(request.resource.data.bio, 200)
+        && (!request.resource.data.keys().hasAny(['updatedAt'])
+          || request.resource.data.updatedAt == request.time)
+        && (!request.resource.data.keys().hasAny(['followerCount']) || request.resource.data.followerCount == 0)
+        && (!request.resource.data.keys().hasAny(['followingCount']) || request.resource.data.followingCount == 0);
+
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'username',
+          'photoURL',
+          'bio',
+          'updatedAt'
+        ])
+        && validOptionalString(request.resource.data.displayName, 60)
+        && validOptionalUsername(request.resource.data.username)
+        && validOptionalString(request.resource.data.photoURL, 500)
+        && validOptionalString(request.resource.data.bio, 200)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedAt'])
+          || request.resource.data.updatedAt == request.time);
+
+      allow delete: if isOwner(userId);
+    }
+
     match /usernames/{username} {
       allow read: if true;
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid;
-      allow delete: if request.auth != null
-        && resource.data.uid == request.auth.uid;
+      allow create: if signedIn()
+        && validUsername(username)
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
+      allow delete: if signedIn()
+        && validUsername(username)
+        && resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username != username;
       allow update: if false;
     }
 
-    // ── 커뮤니티 기능 ────────────────────────────────────────────────────
-
-    // community_quotes: 누구나 읽기; 인증 사용자만 생성
-    // 작성자가 text/author/updatedAt 수정 가능, 삭제 가능
-    // likeCount: 인증 사용자가 ±1만 수정 가능 (클라이언트 denormalized counter)
-    // reportCount: 인증 사용자가 +1만 허용 (신고 시)
     match /community_quotes/{quoteId} {
       allow read: if true;
 
-      allow create: if request.auth != null
-        && request.resource.data.status in ['pending', 'approved']
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'text',
+          'author',
+          'submitterId',
+          'submitterName',
+          'submitterPhotoURL',
+          'language',
+          'status',
+          'likeCount',
+          'reportCount',
+          'createdAt',
+          'categories'
+        ])
         && request.resource.data.submitterId == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() >= 10
-        && request.resource.data.text.size() <= 500;
+        && request.resource.data.status == 'pending'
+        && validText(request.resource.data.text, 3, 500)
+        && validText(request.resource.data.author, 0, 120)
+        && validText(request.resource.data.submitterName, 1, 60)
+        && validOptionalString(request.resource.data.submitterPhotoURL, 500)
+        && validText(request.resource.data.language, 2, 10)
+        && request.resource.data.likeCount == 0
+        && request.resource.data.reportCount == 0
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.categories is list
+        && request.resource.data.categories.size() <= 3;
 
-      // 작성자 편집: text/author/updatedAt만 수정 허용
-      // reportCount +1만 허용 (신고 시)
-      // 관리자: isDisabled 필드만 수정 가능
-      allow update: if request.auth != null
+      allow update: if signedIn()
         && (
           (
             resource.data.submitterId == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'author', 'updatedAt'])
-          )
-          || (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportCount'])
-            && request.resource.data.reportCount == resource.data.reportCount + 1
+            && resource.data.status == 'pending'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'text',
+              'author',
+              'categories',
+              'updatedAt'
+            ])
+            && validText(request.resource.data.text, 3, 500)
+            && validText(request.resource.data.author, 0, 120)
+            && request.resource.data.categories is list
+            && request.resource.data.categories.size() <= 3
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedAt'])
+              || request.resource.data.updatedAt == request.time)
           )
           || (
             isAdmin()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDisabled'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status',
+              'isDisabled'
+            ])
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+              || request.resource.data.status in ['pending', 'approved', 'rejected'])
           )
         );
 
-      // 작성자만 삭제 가능
-      allow delete: if request.auth != null
+      allow delete: if signedIn()
         && resource.data.submitterId == request.auth.uid;
     }
 
-    // community_likes: 인증 사용자가 자기 좋아요만 쓰기/삭제
-    // 문서 ID 규칙: {userId}_{quoteId}
     match /community_likes/{likeId} {
-      allow read: if request.auth != null;
+      allow read: if signedIn();
 
-      allow create: if request.auth != null
-        && likeId.matches(request.auth.uid + '_.*')
-        && request.resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['userId', 'quoteId', 'createdAt'])
+        && request.resource.data.userId == request.auth.uid
+        && validDocId(request.resource.data.quoteId, 200)
+        && likeId == request.auth.uid + '_' + request.resource.data.quoteId
+        && exists(/databases/$(database)/documents/community_quotes/$(request.resource.data.quoteId))
+        && request.resource.data.createdAt == request.time;
 
-      allow delete: if request.auth != null
+      allow delete: if signedIn()
         && resource.data.userId == request.auth.uid;
 
       allow update: if false;
     }
 
-    // community_reports: 인증 사용자가 자기 신고만 생성
-    // 관리자: 전체 읽기 및 resolved 수정 가능
-    // 문서 ID 규칙: {userId}_{quoteId}
     match /community_reports/{reportId} {
-      allow read: if (request.auth != null && resource.data.userId == request.auth.uid)
+      allow read: if (signedIn() && resource.data.userId == request.auth.uid)
         || isAdmin();
 
-      allow create: if request.auth != null
-        && reportId.matches(request.auth.uid + '_.*')
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['userId', 'quoteId', 'reason', 'createdAt'])
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.reason is string;
+        && validDocId(request.resource.data.quoteId, 200)
+        && reportId == request.auth.uid + '_' + request.resource.data.quoteId
+        && exists(/databases/$(database)/documents/community_quotes/$(request.resource.data.quoteId))
+        && validText(request.resource.data.reason, 1, 200)
+        && request.resource.data.createdAt == request.time;
 
-      // 관리자만 resolved 필드 수정 가능
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved']);
       allow delete: if false;
     }
 
-    // follows: 인증 사용자가 자기 팔로우만 생성/삭제
-    // 문서 ID 규칙: {followerId}_{followingId}
     match /follows/{followId} {
-      allow read: if request.auth != null;
+      allow read: if signedIn();
 
-      allow create: if request.auth != null
-        && request.resource.data.followerId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['followerId', 'followedId', 'createdAt'])
+        && request.resource.data.followerId == request.auth.uid
+        && validDocId(request.resource.data.followedId, 200)
+        && request.resource.data.followedId != request.auth.uid
+        && followId == request.auth.uid + '_' + request.resource.data.followedId
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.followedId));
 
-      allow delete: if request.auth != null
+      allow delete: if signedIn()
         && resource.data.followerId == request.auth.uid;
 
       allow update: if false;
     }
 
-    // 팔로우 알림: 수신자 본인이 읽기/read 업데이트; 인증 사용자가 생성(발송); 발신자 또는 수신자가 삭제
-    // 경로: users/{userId}/notifications/{notifId}  (notifId = "follow_{senderUid}")
     match /users/{userId}/notifications/{notifId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
 
-      allow create: if request.auth != null;
+      allow create: if signedIn()
+        && notifId == 'follow_' + request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'type',
+          'fromUid',
+          'fromName',
+          'fromPhotoURL',
+          'read',
+          'createdAt'
+        ])
+        && request.resource.data.type == 'follow'
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.read == false
+        && validOptionalString(request.resource.data.fromName, 60)
+        && validOptionalString(request.resource.data.fromPhotoURL, 500)
+        && request.resource.data.createdAt == request.time;
 
-      // 수신자는 read 필드만 true 로 업데이트 가능
-      allow update: if request.auth != null
-        && request.auth.uid == userId
+      allow update: if isOwner(userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
         && request.resource.data.read == true;
 
-      // 수신자 또는 발신자(unfollow 시)가 삭제 가능
-      allow delete: if request.auth != null
+      allow delete: if signedIn()
         && (request.auth.uid == userId
-            || resource.data.fromUid == request.auth.uid);
+          || resource.data.fromUid == request.auth.uid);
     }
 
-    // ── 사용자 서브컬렉션 ────────────────────────────────────────────────
-
-    // 오늘/날짜별 열람 명언 + 북마크: 본인만 읽기/쓰기
-    // 경로: users/{uid}/quoteHistory/{YYYY-MM-DD | "bookmarked"}
     match /users/{userId}/quoteHistory/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
 
-    // 활동 잔디 기록: 본인만 읽기/쓰기
-    // 경로: users/{uid}/grassHistory/{YYYY-MM-DD}
     match /users/{userId}/grassHistory/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
 
-    // ── 로그 / 평가 / 신고 컬렉션 ────────────────────────────────────────
-
-    // activities: 인증 사용자가 자기 uid로만 생성 (로그인·명언 열람 등 이벤트 로깅)
     match /activities/{docId} {
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'type', 'timestamp', 'metadata'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.type in [
+          'login',
+          'logout',
+          'quote_generated',
+          'quote_shared',
+          'quote_bookmarked',
+          'speak_along_completed',
+          'write_along_completed',
+          'type_along_completed',
+          'premium_purchased',
+          'premium_cancelled'
+        ]
+        && request.resource.data.timestamp == request.time;
       allow read, update, delete: if false;
     }
 
-    // reports: 인증 사용자가 자기 uid로만 신고 생성, 수정/삭제 불가
     match /reports/{docId} {
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'quoteId',
+          'quoteText',
+          'reason',
+          'createdAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && validText(request.resource.data.quoteId, 1, 200)
+        && validText(request.resource.data.quoteText, 1, 300)
+        && request.resource.data.reason in ['incorrect', 'inappropriate', 'duplicate', 'other']
+        && request.resource.data.createdAt == request.time;
       allow read, update, delete: if false;
     }
 
-    // quoteRatings: 자기 평가만 읽기/쓰기
-    // 문서 ID 규칙: {uid}_{quoteId}
     match /quoteRatings/{ratingId} {
-      allow read, write: if request.auth != null
+      allow read: if signedIn()
         && ratingId.matches(request.auth.uid + '_.*');
+
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'quoteId', 'rating', 'timestamp'])
+        && request.resource.data.uid == request.auth.uid
+        && validDocId(request.resource.data.quoteId, 200)
+        && ratingId == request.auth.uid + '_' + request.resource.data.quoteId
+        && request.resource.data.rating in ['like', 'dislike']
+        && request.resource.data.timestamp == request.time;
+
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
     }
   }
 }

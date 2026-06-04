@@ -18,7 +18,6 @@ import {
   limit,
   startAfter,
   serverTimestamp,
-  increment,
   QueryDocumentSnapshot,
   DocumentData,
   type QueryConstraint,
@@ -127,7 +126,7 @@ export async function submitCommunityQuote(
       submitterName,
       submitterPhotoURL: submitterPhotoURL ?? null,
       language,
-      status: 'approved', // direct publish — no moderation queue
+      status: 'pending',
       likeCount: 0,
       createdAt: serverTimestamp(),
       reportCount: 0,
@@ -239,23 +238,6 @@ export async function checkServerRateLimit(uid: string): Promise<boolean> {
   }
 }
 
-export async function recordServerSubmission(uid: string): Promise<void> {
-  const db = getDb();
-  if (!db) return;
-
-  try {
-    const userRef = doc(db, USERS, uid);
-    const snap = await getDoc(userRef);
-    const existing: number[] = snap.exists() ? (snap.data()?.communitySubmissions ?? []) : [];
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    const pruned = existing.filter((t) => t > cutoff);
-    pruned.push(Date.now());
-    await updateDoc(userRef, { communitySubmissions: pruned });
-  } catch (e) {
-    appLog.warn('[communityService] recordServerSubmission failed', e);
-  }
-}
-
 // --------------------------------------------------------------------------
 // Like / Unlike
 // --------------------------------------------------------------------------
@@ -271,10 +253,6 @@ export async function likeCommunityQuote(uid: string, quoteId: string): Promise<
       quoteId,
       createdAt: serverTimestamp(),
     });
-    // Increment denormalized counter
-    await updateDoc(doc(db, COMMUNITY_QUOTES, quoteId), {
-      likeCount: increment(1),
-    });
   } catch (e) {
     appLog.error('[communityService] like failed', e);
     throw e;
@@ -288,9 +266,6 @@ export async function unlikeCommunityQuote(uid: string, quoteId: string): Promis
   const likeId = `${uid}_${quoteId}`;
   try {
     await deleteDoc(doc(db, COMMUNITY_LIKES, likeId));
-    await updateDoc(doc(db, COMMUNITY_QUOTES, quoteId), {
-      likeCount: increment(-1),
-    });
   } catch (e) {
     appLog.error('[communityService] unlike failed', e);
     throw e;
@@ -332,9 +307,6 @@ export async function reportCommunityQuote(
       createdAt: serverTimestamp(),
     });
     // Increment reportCount — Cloud Function auto-rejects at threshold
-    await updateDoc(doc(db, COMMUNITY_QUOTES, quoteId), {
-      reportCount: increment(1),
-    });
     appLog.log('[communityService] reported', { quoteId, reason });
   } catch (e) {
     appLog.error('[communityService] report failed', e);
